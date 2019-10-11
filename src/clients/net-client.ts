@@ -1,10 +1,11 @@
 import Chat from '../chat';
-import ChatClient from './chat-client';
+import ChatClient, { ChatCommandCallback } from './chat-client';
 import { Socket } from 'net';
 
 export default class NetClient implements ChatClient {
   private socket: Socket;
   private chat: Chat;
+  private commandCb: ChatCommandCallback;
 
   constructor(socket: Socket, chat: Chat) {
     this.chat = chat;
@@ -14,14 +15,17 @@ export default class NetClient implements ChatClient {
 
     this.log('cliente conectado');
   }
-  disconnect() {
+  disconnect(): void {
     this.socket.end();
   }
-  sendMessage(message: string) {
+  sendMessage(message: string): void {
     this.socket.write(message + '\r\n');
   }
-  log(...params: Array<any>) {
+  log(...params: Array<any>): void {
     console.log('net: ' + this.socket.remoteAddress, ...params);
+  }
+  onCommand(cb: ChatCommandCallback): void {
+    this.commandCb = cb;
   }
   private onData = (data: Buffer) => {
     data
@@ -31,7 +35,7 @@ export default class NetClient implements ChatClient {
         if (line.trim().length === 0) return;
         const params = line.trim().split(':');
         const command = params.shift();
-        this.chat.processCommand(this, command, params);
+        this.commandCb(this, command, params);
       });
   };
   private onEnd = () => {

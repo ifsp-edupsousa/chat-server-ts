@@ -1,10 +1,11 @@
 import Chat from '../chat';
-import ChatClient from './chat-client';
+import ChatClient, { ChatCommandCallback } from './chat-client';
 import { connection, IMessage } from 'websocket';
 
 export default class WSClient implements ChatClient {
   private conn: connection;
   private chat: Chat;
+  private commandCb: ChatCommandCallback;
 
   constructor(conn: connection, chat: Chat) {
     this.chat = chat;
@@ -23,12 +24,15 @@ export default class WSClient implements ChatClient {
   log(...params: Array<any>) {
     console.log('ws: ' + this.conn.remoteAddress, ...params);
   }
+  onCommand(cb: ChatCommandCallback): void {
+    this.commandCb = cb;
+  }
   private onMessage = (data: IMessage) => {
     data.utf8Data.split('\n').forEach(line => {
       if (line.trim().length === 0) return;
       const params = line.trim().split(':');
       const command = params.shift();
-      this.chat.processCommand(this, command, params);
+      this.commandCb(this, command, params);
     });
   };
   private onEnd = () => {

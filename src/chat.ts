@@ -5,10 +5,15 @@ export default class Chat {
   private registered: Map<string, ChatClient> = new Map();
 
   addGuest(client: ChatClient): void {
+    client.onCommand(this.processCommand.bind(this));
     this.guests.push(client);
   }
 
-  processCommand(client: ChatClient, command: string, params: Array<string>) {
+  processCommand(
+    client: ChatClient,
+    command: string,
+    params: Array<string>
+  ): void {
     if (command === 'login' && params.length === 1) {
       let nickname = params[0];
       this.doLogin(client, nickname);
