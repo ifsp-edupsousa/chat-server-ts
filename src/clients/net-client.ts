@@ -21,7 +21,7 @@ export default class NetClient implements ChatClient {
     this.socket.write(message + '\r\n');
   }
   log(...params: Array<any>) {
-    console.log(this.socket.remoteAddress, ...params);
+    console.log('net: ' + this.socket.remoteAddress, ...params);
   }
   private onData = (data: Buffer) => {
     data
