@@ -1,46 +1,104 @@
 import { createServer, Socket } from 'net';
 
 class Chat {
-  private clients: Array<Client> = [];
+  private guests: Array<Client> = [];
+  private registered: Map<string, Client> = new Map();
 
   newClient(socket: Socket): Client {
     const client = new Client(socket, this);
-    this.clients.push(client);
+    this.guests.push(client);
     return client;
   }
-  writeToAll(message: string, onlyLoggedIn: boolean = false) {
-    console.log(message);
-    this.clients.forEach(c => {
-      if (onlyLoggedIn && !c.isLoggedIn()) return;
-      c.writeLine(message);
-    });
+
+  processCommand(client: Client, command: string, params: Array<string>) {
+    if (command === 'login' && params.length === 1) {
+      let nickname = params[0];
+      this.doLogin(client, nickname);
+    } else if (command === 'mensagem' && params.length >= 2) {
+      const destinatarios = params.shift().split(';');
+      const mensagem = params.shift();
+      this.sendMessage(client, destinatarios, mensagem);
+    }
   }
-  writeToAllExcept(message: string, except: Client) {
-    console.log(message);
-    this.clients.forEach(c => {
-      if (c === except) return;
-      c.writeLine(message);
-    });
-  }
+
   removeClient(client: Client) {
-    this.clients = this.clients.filter(v => v != client);
+    if (!this.removeGuest(client)) this.removeRegisteredClient(client);
   }
-  sendUserList() {
-    const userList = this.clients.reduce((list, client) => {
-      if (client.isLoggedIn()) list.push(client.getNickname());
-      return list;
-    }, []);
+
+  private doLogin(client: Client, nickname: string) {
+    if (this.registered.has(nickname)) {
+      client.writeLine('login:false');
+    } else {
+      this.removeGuest(client);
+      this.registered.set(nickname, client);
+      client.writeLine('login:true');
+      this.sendUserList();
+    }
+  }
+
+  private removeGuest(client: Client): boolean {
+    const guestIndex = this.guests.indexOf(client);
+    if (guestIndex > -1) {
+      this.guests.splice(guestIndex, 1);
+      return true;
+    }
+    return false;
+  }
+
+  private removeRegisteredClient(client: Client): boolean {
+    for (let pair of this.registered.entries()) {
+      if (pair[1] === client) {
+        this.registered.delete(pair[0]);
+        this.sendUserList();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private sendMessage(
+    sender: Client,
+    recipients: Array<string>,
+    message: string
+  ) {
+    const senderName = Array.from(this.registered.entries()).find(
+      ([nickname, client]) => {
+        if (client === sender) return true;
+      }
+    );
+    if (senderName === undefined) return;
+    const userList = Array.from(this.registered.keys());
+    const broadcast = recipients.indexOf('*') > -1;
+    let messageToSend = 'transmitir:' + senderName[0] + ':';
+    let recipientList = userList;
+    if (broadcast) {
+      messageToSend += '*:';
+    } else {
+      recipientList = recipients.filter(recipient => {
+        return userList.indexOf(recipient) > -1;
+      });
+      messageToSend += recipientList.join(';') + ':';
+    }
+    messageToSend += message;
+    for (let recipient of recipientList) {
+      let client = this.registered.get(recipient);
+      client.writeLine(messageToSend);
+    }
+  }
+
+  private sendUserList() {
+    const userList = Array.from(this.registered.keys()).join(';');
     if (userList.length === 0) return;
-    const message = 'users:' + userList.join(':');
-    this.writeToAll(message, true);
+    const message = 'lista_usuarios:' + userList;
+    Array.from(this.registered.values()).forEach(client => {
+      client.writeLine(message);
+    });
   }
 }
 
 class Client {
   private socket: Socket;
   private chat: Chat;
-  private loggedIn: boolean = false;
-  private nickname: string;
 
   constructor(socket: Socket, chat: Chat) {
     this.chat = chat;
@@ -50,26 +108,11 @@ class Client {
 
     this.log('cliente conectado');
   }
-  private login(nickname: string) {
-    this.log('login:' + nickname);
-    this.loggedIn = true;
-    this.nickname = nickname;
-    this.chat.sendUserList();
-  }
-  getNickname(): string {
-    return this.nickname;
-  }
-  isLoggedIn(): boolean {
-    return this.loggedIn;
-  }
   writeLine(line: string) {
     this.socket.write(line + '\r\n');
   }
-  getRemoteAddress() {
-    return this.socket.remoteAddress;
-  }
-  private log(...params: Array<any>) {
-    console.log(this.getRemoteAddress(), ...params);
+  log(...params: Array<any>) {
+    console.log(this.socket.remoteAddress, ...params);
   }
   private onData = (data: Buffer) => {
     data
@@ -79,11 +122,7 @@ class Client {
         if (line.trim().length === 0) return;
         const params = line.trim().split(':');
         const command = params.shift();
-        if (command === 'login' && params.length === 1) {
-          this.login(params[0]);
-        } else {
-          this.log('comando inválido', line);
-        }
+        this.chat.processCommand(this, command, params);
       });
   };
   private onEnd = () => {
