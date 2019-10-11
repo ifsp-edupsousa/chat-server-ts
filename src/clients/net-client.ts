@@ -1,14 +1,15 @@
-import Chat from '../chat';
-import ChatClient, { ChatCommandCallback } from './chat-client';
+import ChatClient, {
+  ChatCommandCallback,
+  ChatDisconnectCallback
+} from './chat-client';
 import { Socket } from 'net';
 
 export default class NetClient implements ChatClient {
   private socket: Socket;
-  private chat: Chat;
   private commandCb: ChatCommandCallback;
+  private disconnectCb: ChatDisconnectCallback;
 
-  constructor(socket: Socket, chat: Chat) {
-    this.chat = chat;
+  constructor(socket: Socket) {
     this.socket = socket;
     this.socket.on('end', this.onEnd);
     this.socket.on('data', this.onData);
@@ -27,6 +28,9 @@ export default class NetClient implements ChatClient {
   onCommand(cb: ChatCommandCallback): void {
     this.commandCb = cb;
   }
+  onDisconnect(cb: ChatDisconnectCallback): void {
+    this.disconnectCb = cb;
+  }
   private onData = (data: Buffer) => {
     data
       .toString()
@@ -39,7 +43,7 @@ export default class NetClient implements ChatClient {
       });
   };
   private onEnd = () => {
-    this.chat.removeClient(this);
+    this.disconnectCb(this);
     this.log('cliente desconectado');
   };
 }

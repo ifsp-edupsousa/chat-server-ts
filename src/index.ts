@@ -12,7 +12,7 @@ startWSServer(chat);
 
 function startTCPServer(chat: Chat) {
   const server = createServer(socket => {
-    const client = new NetClient(socket, chat);
+    const client = new NetClient(socket);
     chat.addGuest(client);
   });
 
@@ -33,7 +33,7 @@ function startWSServer(chat: Chat) {
 
   wsServer.on('request', req => {
     const connection = req.accept(null, req.origin);
-    const client = new WSClient(connection, chat);
+    const client = new WSClient(connection);
     chat.addGuest(client);
   });
 

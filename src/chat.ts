@@ -6,6 +6,7 @@ export default class Chat {
 
   addGuest(client: ChatClient): void {
     client.onCommand(this.processCommand.bind(this));
+    client.onDisconnect(client => this.removeClient(client));
     this.guests.push(client);
   }
 
