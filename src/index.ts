@@ -17,7 +17,9 @@ class Chat {
     } else if (command === 'mensagem' && params.length >= 2) {
       const destinatarios = params.shift().split(';');
       const mensagem = params.shift();
-      this.sendMessage(client, destinatarios, mensagem);
+      this.doMessage(client, destinatarios, mensagem);
+    } else if (command === 'sair') {
+      client.disconnect();
     }
   }
 
@@ -27,13 +29,44 @@ class Chat {
 
   private doLogin(client: Client, nickname: string) {
     if (this.registered.has(nickname)) {
-      client.writeLine('login:false');
+      client.sendMessage('login:false');
     } else {
       this.removeGuest(client);
       this.registered.set(nickname, client);
-      client.writeLine('login:true');
+      client.sendMessage('login:true');
       this.sendUserList();
     }
+  }
+
+  private doMessage(
+    sender: Client,
+    recipients: Array<string>,
+    message: string
+  ) {
+    const senderName = this.getNicknameForClient(sender);
+    if (senderName === undefined) return;
+    const nicknameList = this.getNicknamesList();
+    const broadcast = recipients.indexOf('*') > -1;
+    let messageToSend = 'transmitir:' + senderName + ':';
+    let recipientList = nicknameList;
+    if (broadcast) {
+      messageToSend += '*:';
+    } else {
+      recipientList = recipients.filter(recipient => {
+        return nicknameList.indexOf(recipient) > -1;
+      });
+      messageToSend += recipientList.join(';') + ':';
+    }
+    messageToSend += message;
+    this.sendTo(messageToSend, recipientList);
+  }
+
+  private getRegisteredClientList(): Array<Client> {
+    return Array.from(this.registered.values());
+  }
+
+  private getNicknamesList(): Array<string> {
+    return Array.from(this.registered.keys());
   }
 
   private removeGuest(client: Client): boolean {
@@ -56,42 +89,28 @@ class Chat {
     return false;
   }
 
-  private sendMessage(
-    sender: Client,
-    recipients: Array<string>,
-    message: string
-  ) {
-    const senderName = Array.from(this.registered.entries()).find(
-      ([nickname, client]) => {
-        if (client === sender) return true;
-      }
-    );
-    if (senderName === undefined) return;
-    const userList = Array.from(this.registered.keys());
-    const broadcast = recipients.indexOf('*') > -1;
-    let messageToSend = 'transmitir:' + senderName[0] + ':';
-    let recipientList = userList;
-    if (broadcast) {
-      messageToSend += '*:';
-    } else {
-      recipientList = recipients.filter(recipient => {
-        return userList.indexOf(recipient) > -1;
-      });
-      messageToSend += recipientList.join(';') + ':';
-    }
-    messageToSend += message;
-    for (let recipient of recipientList) {
-      let client = this.registered.get(recipient);
-      client.writeLine(messageToSend);
+  private getNicknameForClient(client: Client): string {
+    const entry = Array.from(this.registered.entries()).find(entry => {
+      if (client === entry[1]) return true;
+    });
+    if (entry === undefined) return undefined;
+    return entry[0];
+  }
+
+  private sendTo(message: string, toList: Array<string>) {
+    for (let to of toList) {
+      let client = this.registered.get(to);
+      if (client === undefined) continue;
+      client.sendMessage(message);
     }
   }
 
   private sendUserList() {
-    const userList = Array.from(this.registered.keys()).join(';');
+    const userList = this.getNicknamesList().join(';');
     if (userList.length === 0) return;
     const message = 'lista_usuarios:' + userList;
-    Array.from(this.registered.values()).forEach(client => {
-      client.writeLine(message);
+    this.getRegisteredClientList().forEach(client => {
+      client.sendMessage(message);
     });
   }
 }
@@ -108,8 +127,11 @@ class Client {
 
     this.log('cliente conectado');
   }
-  writeLine(line: string) {
-    this.socket.write(line + '\r\n');
+  disconnect() {
+    this.socket.end();
+  }
+  sendMessage(message: string) {
+    this.socket.write(message + '\r\n');
   }
   log(...params: Array<any>) {
     console.log(this.socket.remoteAddress, ...params);
