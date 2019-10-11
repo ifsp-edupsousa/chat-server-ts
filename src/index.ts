@@ -1,21 +1,32 @@
 import { createServer, Socket } from 'net';
 
-class Client {
-  private static clients: Array<Client> = [];
-  private socket: Socket;
-  private loggedIn: boolean = false;
-  private nickname: string;
+class Chat {
+  private clients: Array<Client> = [];
 
-  constructor(socket: Socket) {
-    Client.clients.push(this);
-    this.socket = socket;
-    this.socket.on('end', this.onEnd);
-    this.socket.on('data', this.onData);
-
-    this.log('cliente conectado');
+  newClient(socket: Socket): Client {
+    const client = new Client(socket, this);
+    this.clients.push(client);
+    return client;
   }
-  static sendUserList() {
-    const userList = Client.clients.reduce((list, client) => {
+  writeToAll(message: string, onlyLoggedIn: boolean = false) {
+    console.log(message);
+    this.clients.forEach(c => {
+      if (onlyLoggedIn && !c.isLoggedIn()) return;
+      c.writeLine(message);
+    });
+  }
+  writeToAllExcept(message: string, except: Client) {
+    console.log(message);
+    this.clients.forEach(c => {
+      if (c === except) return;
+      c.writeLine(message);
+    });
+  }
+  removeClient(client: Client) {
+    this.clients = this.clients.filter(v => v != client);
+  }
+  sendUserList() {
+    const userList = this.clients.reduce((list, client) => {
       if (client.isLoggedIn()) list.push(client.getNickname());
       return list;
     }, []);
@@ -23,25 +34,27 @@ class Client {
     const message = 'users:' + userList.join(':');
     this.writeToAll(message, true);
   }
-  static writeToAll(message: string, onlyLoggedIn: boolean = false) {
-    console.log(message);
-    Client.clients.forEach(c => {
-      if (onlyLoggedIn && !c.isLoggedIn()) return;
-      c.writeLine(message);
-    });
-  }
-  static writeToAllExcept(message: string, except: Client) {
-    console.log(message);
-    Client.clients.forEach(c => {
-      if (c === except) return;
-      c.writeLine(message);
-    });
+}
+
+class Client {
+  private socket: Socket;
+  private chat: Chat;
+  private loggedIn: boolean = false;
+  private nickname: string;
+
+  constructor(socket: Socket, chat: Chat) {
+    this.chat = chat;
+    this.socket = socket;
+    this.socket.on('end', this.onEnd);
+    this.socket.on('data', this.onData);
+
+    this.log('cliente conectado');
   }
   private login(nickname: string) {
     this.log('login:' + nickname);
     this.loggedIn = true;
     this.nickname = nickname;
-    Client.sendUserList();
+    this.chat.sendUserList();
   }
   getNickname(): string {
     return this.nickname;
@@ -74,13 +87,15 @@ class Client {
       });
   };
   private onEnd = () => {
-    Client.clients = Client.clients.filter(v => v != this);
+    this.chat.removeClient(this);
     this.log('cliente desconectado');
   };
 }
 
+const chat = new Chat();
+
 const server = createServer(socket => {
-  const client = new Client(socket);
+  chat.newClient(socket);
 });
 
 server.on('error', e => {
