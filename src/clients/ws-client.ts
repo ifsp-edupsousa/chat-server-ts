@@ -34,6 +34,7 @@ export default class WSClient implements ChatClient {
   private onMessage = (data: IMessage) => {
     data.utf8Data.split('\n').forEach(line => {
       if (line.trim().length === 0) return;
+      this.log(line.trim());
       const params = line.trim().split(':');
       const command = params.shift();
       this.commandCb(this, command, params);

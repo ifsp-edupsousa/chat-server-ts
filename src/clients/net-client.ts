@@ -32,6 +32,7 @@ export default class NetClient implements ChatClient {
     this.disconnectCb = cb;
   }
   private onData = (data: Buffer) => {
+    this.log(data.toString().trim());
     data
       .toString()
       .split('\n')
