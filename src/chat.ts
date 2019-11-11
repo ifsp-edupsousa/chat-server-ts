@@ -60,6 +60,9 @@ export default class Chat {
         return nicknameList.indexOf(recipient) > -1;
       });
       messageToSend += recipientList.join(';') + ':';
+      if (recipientList.indexOf(senderName) === -1) {
+        recipientList.push(senderName);
+      }
     }
     messageToSend += message;
     this.sendTo(messageToSend, recipientList);
